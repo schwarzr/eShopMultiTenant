@@ -4,6 +4,7 @@ using Infrastructure.Data;
 using Infrastructure.Identity;
 using Infrastructure.Logging;
 using Infrastructure.Services;
+using Infrastructure.Tenant;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.eShopWeb.Interfaces;
 using Microsoft.eShopWeb.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -31,16 +33,16 @@ namespace Microsoft.eShopWeb
         public void ConfigureDevelopmentServices(IServiceCollection services)
         {
             // use in-memory database
-            ConfigureTestingServices(services);
+            //ConfigureTestingServices(services);
 
             // use real database
-            // ConfigureProductionServices(services);
+            ConfigureProductionServices(services);
 
         }
         public void ConfigureTestingServices(IServiceCollection services)
         {
             // use in-memory database
-            services.AddDbContext<CatalogContext>(c => 
+            services.AddDbContext<CatalogContext>(c =>
                 c.UseInMemoryDatabase("Catalog"));
 
             // Add Identity DbContext
@@ -53,23 +55,17 @@ namespace Microsoft.eShopWeb
         public void ConfigureProductionServices(IServiceCollection services)
         {
             // use real database
-            services.AddDbContext<CatalogContext>(c =>
-            {
-                try
-                {
-                    // Requires LocalDB which can be installed with SQL Server Express 2016
-                    // https://www.microsoft.com/en-us/download/details.aspx?id=54284
-                    c.UseSqlServer(Configuration.GetConnectionString("CatalogConnection"));
-                }
-                catch (System.Exception ex)
-                {
-                    var message = ex.Message;
-                }
-            });
+            services.AddDbContext<CatalogContext>((sp, c) =>
+                c.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
 
             // Add Identity DbContext
-            services.AddDbContext<AppIdentityDbContext>(options =>
-                options.UseSqlServer(Configuration.GetConnectionString("IdentityConnection")));
+            services.AddDbContext<AppIdentityDbContext>((sp, options) =>
+                options.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
+
+            // Add Tenant DbContext
+            services.AddDbContext<TenantContext>(options =>
+                options.UseSqlServer(Configuration.GetConnectionString("TenantContext")));
+
 
             ConfigureServices(services);
         }
@@ -88,10 +84,14 @@ namespace Microsoft.eShopWeb
                 options.LogoutPath = "/Account/Signout";
             });
 
+            services.AddScoped<ITenantScope, TenantScope>();
+            services.AddSingleton<TenantCache>();
+
             services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
             services.AddScoped(typeof(IAsyncRepository<>), typeof(EfRepository<>));
 
-            services.AddScoped<ICatalogService, CachedCatalogService>();
+            //services.AddScoped<ICatalogService, CachedCatalogService>();
+            services.AddScoped<ICatalogService, CatalogService>();
             services.AddScoped<IBasketService, BasketService>();
             services.AddScoped<IBasketViewModelService, BasketViewModelService>();
             services.AddScoped<IOrderService, OrderService>();
@@ -112,9 +112,11 @@ namespace Microsoft.eShopWeb
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, 
+        public void Configure(IApplicationBuilder app,
             IHostingEnvironment env)
         {
+            app.UseMiddleware<TenantMiddleware>();
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();

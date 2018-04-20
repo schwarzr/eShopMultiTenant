@@ -51,6 +51,7 @@ namespace Microsoft.eShopWeb.Services
                     CatalogItemId = i.CatalogItemId
 
                 };
+
                 var item = _itemRepository.GetById(i.CatalogItemId);
                 itemModel.PictureUrl = _uriComposer.ComposePicUri(item.PictureUri);
                 itemModel.ProductName = item.Name;
