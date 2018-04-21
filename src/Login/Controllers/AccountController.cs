@@ -18,18 +18,15 @@ namespace Microsoft.eShopWeb.Controllers
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
-        private readonly IBasketService _basketService;
         private readonly IAppLogger<AccountController> _logger;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
-            IBasketService basketService,
             IAppLogger<AccountController> logger)
         {
             _userManager = userManager;
             _signInManager = signInManager;
-            _basketService = basketService;
             _logger = logger;
         }
 
@@ -41,7 +38,7 @@ namespace Microsoft.eShopWeb.Controllers
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
             ViewData["ReturnUrl"] = returnUrl;
-            if (!String.IsNullOrEmpty(returnUrl) && 
+            if (!String.IsNullOrEmpty(returnUrl) &&
                 returnUrl.IndexOf("checkout", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 ViewData["ReturnUrl"] = "/Basket/Index";
@@ -63,18 +60,13 @@ namespace Microsoft.eShopWeb.Controllers
             ViewData["ReturnUrl"] = returnUrl;
 
             var result = await _signInManager.PasswordSignInAsync(model.Email, model.Password, model.RememberMe, lockoutOnFailure: false);
+            
             if (result.RequiresTwoFactor)
             {
                 return RedirectToAction(nameof(LoginWith2fa), new { returnUrl, model.RememberMe });
             }
             if (result.Succeeded)
             {
-                string anonymousBasketId = Request.Cookies[Constants.BASKET_COOKIENAME];
-                if (!String.IsNullOrEmpty(anonymousBasketId))
-                {
-                    await _basketService.TransferBasketAsync(anonymousBasketId, model.Email);
-                    Response.Cookies.Delete(Constants.BASKET_COOKIENAME);
-                }
                 return RedirectToLocal(returnUrl);
             }
             ModelState.AddModelError(string.Empty, "Invalid login attempt.");
@@ -151,19 +143,20 @@ namespace Microsoft.eShopWeb.Controllers
         {
             await _signInManager.SignOutAsync();
 
-            return RedirectToAction(nameof(CatalogController.Index), "Catalog");
+            return Redirect("/");
         }
 
         [AllowAnonymous]
-        public IActionResult Register()
+        public IActionResult Register(string returnUrl = null)
         {
+            ViewData["ReturnUrl"] = returnUrl;
             return View();
         }
 
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Register(RegisterViewModel model, string returnUrl = null)
+        public async Task<IActionResult> Register(RegisterViewModel model, [FromQuery]string returnUrl = null)
         {
             if (ModelState.IsValid)
             {
@@ -176,6 +169,7 @@ namespace Microsoft.eShopWeb.Controllers
                 }
                 AddErrors(result);
             }
+            ViewData["ReturnUrl"] = returnUrl;
             // If we got this far, something failed, redisplay form
             return View(model);
         }
@@ -184,10 +178,6 @@ namespace Microsoft.eShopWeb.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ConfirmEmail(string userId, string code)
         {
-            if (userId == null || code == null)
-            {
-                return RedirectToAction(nameof(CatalogController.Index), "Catalog");
-            }
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
             {
@@ -211,14 +201,7 @@ namespace Microsoft.eShopWeb.Controllers
 
         private IActionResult RedirectToLocal(string returnUrl)
         {
-            if (Url.IsLocalUrl(returnUrl))
-            {
-                return Redirect(returnUrl);
-            }
-            else
-            {
-                return RedirectToAction(nameof(CatalogController.Index), "Catalog");
-            }
+            return Redirect(returnUrl);
         }
 
         private void AddErrors(IdentityResult result)

@@ -5,6 +5,9 @@ using Infrastructure.Identity;
 using Infrastructure.Logging;
 using Infrastructure.Services;
 using Infrastructure.Tenant;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OAuth.Claims;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +19,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Security.Claims;
 using System.Text;
 
 namespace Microsoft.eShopWeb
@@ -58,31 +62,28 @@ namespace Microsoft.eShopWeb
             services.AddDbContext<CatalogContext>((sp, c) =>
                 c.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
 
-            // Add Identity DbContext
-            services.AddDbContext<AppIdentityDbContext>((sp, options) =>
-                options.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
-
-            // Add Tenant DbContext
-            services.AddDbContext<TenantContext>(options =>
-                options.UseSqlServer(Configuration.GetConnectionString("TenantContext")));
-
-
             ConfigureServices(services);
         }
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddIdentity<ApplicationUser, IdentityRole>()
-                .AddEntityFrameworkStores<AppIdentityDbContext>()
-                .AddDefaultTokenProviders();
-
-            services.ConfigureApplicationCookie(options =>
+            services.AddAuthentication(options =>
             {
-                options.Cookie.HttpOnly = true;
-                options.ExpireTimeSpan = TimeSpan.FromHours(1);
-                options.LoginPath = "/Account/Signin";
-                options.LogoutPath = "/Account/Signout";
-            });
+                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+            })
+                .AddCookie()
+                .AddOpenIdConnect(options =>
+                {
+                    options.ResponseType = "code";
+                    options.RequireHttpsMetadata = false;
+                    options.Authority = "http://localhost:8000";
+                    options.ClientId = "12345678";
+                    options.ClientSecret = "12345678";
+                    options.GetClaimsFromUserInfoEndpoint = true;
+                    options.ClaimActions.Add(new JsonKeyClaimAction(ClaimTypes.Name, ClaimValueTypes.String, "name"));
+                });
 
             services.AddScoped<ITenantScope, TenantScope>();
             services.AddSingleton<TenantCache>();
@@ -115,6 +116,8 @@ namespace Microsoft.eShopWeb
         public void Configure(IApplicationBuilder app,
             IHostingEnvironment env)
         {
+            app.UseAuthentication();
+
             app.UseMiddleware<TenantMiddleware>();
 
             if (env.IsDevelopment())

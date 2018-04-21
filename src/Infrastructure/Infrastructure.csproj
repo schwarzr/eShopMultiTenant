@@ -23,6 +23,5 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Data\Migrations\" />
-    <Folder Include="Tenant\Migrations\" />
   </ItemGroup>
 </Project>

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication;
 
 namespace Microsoft.eShopWeb
 {
@@ -21,32 +22,43 @@ namespace Microsoft.eShopWeb
 
         public async Task Invoke(HttpContext context)
         {
-            var scope = context.RequestServices.GetService<ITenantScope>();
-
-            var segments = context.Request.Path.Value.Split('/', System.StringSplitOptions.RemoveEmptyEntries);
-            if (!segments.Any())
+            var authorizeResult = await context.AuthenticateAsync();
+            if (authorizeResult.Succeeded && authorizeResult.Principal != null)
             {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
+                var token = await context.GetTokenAsync("access_token");
+
+                await _next(context);
             }
-
-            var key = segments.First();
-            var cache = context.RequestServices.GetService<TenantCache>();
-            var cachedScope = await cache.GetTenantScopeAsync(key, context.RequestServices);
-
-            if (cachedScope == null)
+            else
             {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
+                await context.ChallengeAsync();
             }
+            //var scope = context.RequestServices.GetService<ITenantScope>();
 
-            scope.TenantKey = cachedScope.TenantKey;
-            scope.ConnectionString = cachedScope.ConnectionString;
+            //var segments = context.Request.Path.Value.Split('/', System.StringSplitOptions.RemoveEmptyEntries);
+            //if (!segments.Any())
+            //{
+            //    context.Response.StatusCode = StatusCodes.Status404NotFound;
+            //    return;
+            //}
 
-            context.Request.PathBase = context.Request.PathBase + "/" + scope.TenantKey;
-            context.Request.Path = "/" + string.Join("/", segments.Skip(1));
-            
-            await _next(context);
+            //var key = segments.First();
+            //var cache = context.RequestServices.GetService<TenantCache>();
+            //var cachedScope = await cache.GetTenantScopeAsync(key, context.RequestServices);
+
+            //if (cachedScope == null)
+            //{
+            //    context.Response.StatusCode = StatusCodes.Status404NotFound;
+            //    return;
+            //}
+
+            //scope.TenantKey = cachedScope.TenantKey;
+            //scope.ConnectionString = cachedScope.ConnectionString;
+
+            //context.Request.PathBase = context.Request.PathBase + "/" + scope.TenantKey;
+            //context.Request.Path = "/" + string.Join("/", segments.Skip(1));
+
+
         }
     }
 }
