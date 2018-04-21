@@ -17,44 +17,23 @@ namespace Microsoft.eShopWeb.Controllers
     public class BasketController : Controller
     {
         private readonly IBasketService _basketService;
-        private readonly IUriComposer _uriComposer;
-        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly IBasketViewModelService _basketViewModelService;
         private readonly IAppLogger<BasketController> _logger;
         private readonly IOrderService _orderService;
-        private readonly IBasketViewModelService _basketViewModelService;
+        private readonly IUriComposer _uriComposer;
 
         public BasketController(IBasketService basketService,
             IBasketViewModelService basketViewModelService,
             IOrderService orderService,
             IUriComposer uriComposer,
-            SignInManager<ApplicationUser> signInManager,
             IAppLogger<BasketController> logger)
         {
             _basketService = basketService;
             _uriComposer = uriComposer;
-            _signInManager = signInManager;
             _logger = logger;
             _orderService = orderService;
             _basketViewModelService = basketViewModelService;
         }
-
-        [HttpGet]
-        public async Task<IActionResult> Index()
-        {
-            var basketModel = await GetBasketViewModelAsync();
-
-            return View(basketModel);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Index(Dictionary<string, int> items)
-        {
-            var basketViewModel = await GetBasketViewModelAsync();
-            await _basketService.SetQuantities(basketViewModel.Id, items);
-
-            return View(await GetBasketViewModelAsync());
-        }
-
 
         // POST: /Basket/AddToBasket
         [HttpPost]
@@ -85,9 +64,26 @@ namespace Microsoft.eShopWeb.Controllers
             return View("Checkout");
         }
 
+        [HttpGet]
+        public async Task<IActionResult> Index()
+        {
+            var basketModel = await GetBasketViewModelAsync();
+
+            return View(basketModel);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Index(Dictionary<string, int> items)
+        {
+            var basketViewModel = await GetBasketViewModelAsync();
+            await _basketService.SetQuantities(basketViewModel.Id, items);
+
+            return View(await GetBasketViewModelAsync());
+        }
+
         private async Task<BasketViewModel> GetBasketViewModelAsync()
         {
-            if (_signInManager.IsSignedIn(HttpContext.User))
+            if (HttpContext.User.Identity.IsAuthenticated)
             {
                 return await _basketViewModelService.GetOrCreateBasketForUser(User.Identity.Name);
             }

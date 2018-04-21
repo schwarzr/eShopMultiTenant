@@ -1,0 +1,22 @@
+﻿@using Microsoft.eShopWeb.ViewModels.Account
+@model LoginViewModel
+@{
+    ViewData["Title"] = "Log in";
+}
+<div class="brand-header-block">
+    <ul class="container">
+        @*<li><a asp-area="" asp-controller="Account" asp-action="Register">REGISTER</a></li>*@
+        <li class="active" style="margin-right: 65px;">LOGIN</li>
+    </ul>
+</div>
+<div class="container account-login-container">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>No Tenants assigned. Please contact the technical support.</h1>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
+}

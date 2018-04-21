@@ -1,6 +1,7 @@
 ﻿using ApplicationCore.Interfaces;
 using Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -11,14 +12,13 @@ using Web.ViewModels.Account;
 
 namespace Microsoft.eShopWeb.Controllers
 {
-
     [Route("[controller]/[action]")]
-    [Authorize]
+    [Authorize(AuthenticationSchemes = "Identity.Application")]
     public class AccountController : Controller
     {
-        private readonly UserManager<ApplicationUser> _userManager;
-        private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly IAppLogger<AccountController> _logger;
+        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
@@ -30,47 +30,24 @@ namespace Microsoft.eShopWeb.Controllers
             _logger = logger;
         }
 
-        // GET: /Account/SignIn 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> SignIn(string returnUrl = null)
+        public async Task<IActionResult> ConfirmEmail(string userId, string code)
         {
-            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
-
-            ViewData["ReturnUrl"] = returnUrl;
-            if (!String.IsNullOrEmpty(returnUrl) &&
-                returnUrl.IndexOf("checkout", StringComparison.OrdinalIgnoreCase) >= 0)
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
             {
-                ViewData["ReturnUrl"] = "/Basket/Index";
+                throw new ApplicationException($"Unable to load user with ID '{userId}'.");
             }
-
-            return View();
+            var result = await _userManager.ConfirmEmailAsync(user, code);
+            return View(result.Succeeded ? "ConfirmEmail" : "Error");
         }
 
-        // POST: /Account/SignIn
-        [HttpPost]
+        [HttpGet]
         [AllowAnonymous]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SignIn(LoginViewModel model, string returnUrl = null)
+        public IActionResult Lockout()
         {
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
-            ViewData["ReturnUrl"] = returnUrl;
-
-            var result = await _signInManager.PasswordSignInAsync(model.Email, model.Password, model.RememberMe, lockoutOnFailure: false);
-            
-            if (result.RequiresTwoFactor)
-            {
-                return RedirectToAction(nameof(LoginWith2fa), new { returnUrl, model.RememberMe });
-            }
-            if (result.Succeeded)
-            {
-                return RedirectToLocal(returnUrl);
-            }
-            ModelState.AddModelError(string.Empty, "Invalid login attempt.");
-            return View(model);
+            return View();
         }
 
         [HttpGet]
@@ -129,23 +106,6 @@ namespace Microsoft.eShopWeb.Controllers
             }
         }
 
-        [HttpGet]
-        [AllowAnonymous]
-        public IActionResult Lockout()
-        {
-            return View();
-        }
-
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<ActionResult> SignOut()
-        {
-            await _signInManager.SignOutAsync();
-
-            return Redirect("/");
-        }
-
         [AllowAnonymous]
         public IActionResult Register(string returnUrl = null)
         {
@@ -176,19 +136,6 @@ namespace Microsoft.eShopWeb.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> ConfirmEmail(string userId, string code)
-        {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                throw new ApplicationException($"Unable to load user with ID '{userId}'.");
-            }
-            var result = await _userManager.ConfirmEmailAsync(user, code);
-            return View(result.Succeeded ? "ConfirmEmail" : "Error");
-        }
-
-        [HttpGet]
-        [AllowAnonymous]
         public IActionResult ResetPassword(string code = null)
         {
             if (code == null)
@@ -199,8 +146,65 @@ namespace Microsoft.eShopWeb.Controllers
             return View(model);
         }
 
-        private IActionResult RedirectToLocal(string returnUrl)
+        // GET: /Account/SignIn
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> SignIn(string returnUrl = null)
         {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+            ViewData["ReturnUrl"] = returnUrl;
+            if (!String.IsNullOrEmpty(returnUrl) &&
+                returnUrl.IndexOf("checkout", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                ViewData["ReturnUrl"] = "/Basket/Index";
+            }
+
+            return View();
+        }
+
+        // POST: /Account/SignIn
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SignIn(LoginViewModel model, string returnUrl = null)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+            ViewData["ReturnUrl"] = returnUrl;
+
+            var result = await _signInManager.PasswordSignInAsync(model.Email, model.Password, model.RememberMe, lockoutOnFailure: false);
+
+            if (result.RequiresTwoFactor)
+            {
+                return RedirectToAction(nameof(LoginWith2fa), new { returnUrl, model.RememberMe });
+            }
+            if (result.Succeeded)
+            {
+                return RedirectToLocal(returnUrl);
+            }
+            ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<ActionResult> SignOut()
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            await _signInManager.SignOutAsync();
+
+            return Redirect("/");
+        }
+
+        [HttpGet]
+        public async Task<ActionResult> SignOut(string returnUrl)
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            await _signInManager.SignOutAsync();
+
             return Redirect(returnUrl);
         }
 
@@ -210,6 +214,11 @@ namespace Microsoft.eShopWeb.Controllers
             {
                 ModelState.AddModelError("", error.Description);
             }
+        }
+
+        private IActionResult RedirectToLocal(string returnUrl)
+        {
+            return Redirect(returnUrl);
         }
     }
 }

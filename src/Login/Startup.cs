@@ -16,16 +16,34 @@ using IdentityServer4.Models;
 using ApplicationCore.Interfaces;
 using Infrastructure.Logging;
 using Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace Login
 {
     public class Startup
     {
-        public IConfiguration Configuration { get; }
-
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+        }
+
+        public IConfiguration Configuration { get; }
+
+        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseStaticFiles();
+            app.UseAuthentication();
+
+            app.UseIdentityServer();
+
+            app.UseMvc();
         }
 
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -34,7 +52,7 @@ namespace Login
         {
             services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<AppIdentityDbContext>()
-             .AddDefaultTokenProviders();
+                .AddDefaultTokenProviders();
 
             services.ConfigureApplicationCookie(options =>
             {
@@ -52,9 +70,8 @@ namespace Login
 
             services.AddIdentityServer(options =>
             {
-                options.UserInteraction.LoginUrl = "~/account/signin";
+                options.UserInteraction.LoginUrl = "~/tenant/signin";
             })
-            .
             .AddDeveloperSigningCredential()
             .AddInMemoryPersistedGrants()
             .AddInMemoryIdentityResources(
@@ -62,11 +79,9 @@ namespace Login
                 {
                     new IdentityResources.OpenId(),
                     new IdentityResources.Email(),
-                    new IdentityResources.Profile()
+                    new IdentityResources.Profile(),
+                    new IdentityResource("webapp","eStore Web application",new []{ "connection_string", "tenant_id", "teanant_key" })
                 })
-            .AddInMemoryApiResources(new[] {
-                new ApiResource("webapp","eStore Web application",new []{ "connection_string", "tenant_id", "user_id" })
-            })
             .AddInMemoryClients(new[]{
                 new Client {
                     ClientId = "12345678",
@@ -74,32 +89,27 @@ namespace Login
                     ClientName = "Webapp",
                     AllowedGrantTypes = GrantTypes.Code,
                     AllowedScopes =  {"openid", "profile", "webapp"},
-                    AccessTokenType = AccessTokenType.Jwt,
+                    AlwaysSendClientClaims = true,
+                    AccessTokenType = AccessTokenType.Reference,
                     RedirectUris = { "http://localhost:7000/signin-oidc"},
                     RequireConsent = false
                 }
             })
-            .AddAspNetIdentity<ApplicationUser>();
+            .AddAspNetIdentity<ApplicationUser>()
+            .AddProfileService<TenantProfileService>();
 
+            services.AddAuthentication(options =>
+            {
+                options.DefaultScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignOutScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+            })
+            .AddCookie();
 
             services.AddScoped(typeof(IAppLogger<>), typeof(LoggerAdapter<>));
             services.AddTransient<IEmailSender, EmailSender>();
-        }
-
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
-        {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
-
-            app.UseStaticFiles();
-            app.UseAuthentication();
-
-            app.UseIdentityServer();
-
-            app.UseMvc();
         }
     }
 }

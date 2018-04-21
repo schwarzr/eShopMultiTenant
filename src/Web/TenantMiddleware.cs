@@ -13,10 +13,12 @@ namespace Microsoft.eShopWeb
 {
     public class TenantMiddleware
     {
+        private readonly TenantCache _cache;
         private readonly RequestDelegate _next;
 
-        public TenantMiddleware(RequestDelegate next)
+        public TenantMiddleware(RequestDelegate next, TenantCache cache)
         {
+            _cache = cache;
             _next = next;
         }
 
@@ -25,7 +27,17 @@ namespace Microsoft.eShopWeb
             var authorizeResult = await context.AuthenticateAsync();
             if (authorizeResult.Succeeded && authorizeResult.Principal != null)
             {
-                var token = await context.GetTokenAsync("access_token");
+                var scope = context.RequestServices.GetService<ITenantScope>();
+                scope.ConnectionString = authorizeResult.Principal.FindFirst("connectionstring").Value;
+                scope.TenantKey = authorizeResult.Principal.FindFirst("tenantkey").Value;
+
+                var exists = await _cache.GetTenantScopeAsync(scope.TenantKey, context.RequestServices);
+
+                if (!exists.GetValueOrDefault())
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
 
                 await _next(context);
             }
@@ -57,8 +69,6 @@ namespace Microsoft.eShopWeb
 
             //context.Request.PathBase = context.Request.PathBase + "/" + scope.TenantKey;
             //context.Request.Path = "/" + string.Join("/", segments.Skip(1));
-
-
         }
     }
 }

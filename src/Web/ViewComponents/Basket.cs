@@ -13,13 +13,10 @@ namespace Web.ViewComponents
     public class Basket : ViewComponent
     {
         private readonly IBasketViewModelService _basketService;
-        private readonly SignInManager<ApplicationUser> _signInManager;
 
-        public Basket(IBasketViewModelService basketService,
-                        SignInManager<ApplicationUser> signInManager)
+        public Basket(IBasketViewModelService basketService)
         {
             _basketService = basketService;
-            _signInManager = signInManager;
         }
 
         public async Task<IViewComponentResult> InvokeAsync(string userName)
@@ -29,17 +26,6 @@ namespace Web.ViewComponents
             return View(vm);
         }
 
-        private async Task<BasketViewModel> GetBasketViewModelAsync()
-        {
-            if (_signInManager.IsSignedIn(HttpContext.User))
-            {
-                return await _basketService.GetOrCreateBasketForUser(User.Identity.Name);
-            }
-            string anonymousId = GetBasketIdFromCookie();
-            if (anonymousId == null) return new BasketViewModel();
-            return await _basketService.GetOrCreateBasketForUser(anonymousId);
-        }
-
         private string GetBasketIdFromCookie()
         {
             if (Request.Cookies.ContainsKey(Constants.BASKET_COOKIENAME))
@@ -47,6 +33,17 @@ namespace Web.ViewComponents
                 return Request.Cookies[Constants.BASKET_COOKIENAME];
             }
             return null;
+        }
+
+        private async Task<BasketViewModel> GetBasketViewModelAsync()
+        {
+            if (HttpContext.User.Identity.IsAuthenticated)
+            {
+                return await _basketService.GetOrCreateBasketForUser(User.Identity.Name);
+            }
+            string anonymousId = GetBasketIdFromCookie();
+            if (anonymousId == null) return new BasketViewModel();
+            return await _basketService.GetOrCreateBasketForUser(anonymousId);
         }
     }
 }

@@ -27,90 +27,13 @@ namespace Microsoft.eShopWeb
     public class Startup
     {
         private IServiceCollection _services;
+
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
         }
 
         public IConfiguration Configuration { get; }
-
-        public void ConfigureDevelopmentServices(IServiceCollection services)
-        {
-            // use in-memory database
-            //ConfigureTestingServices(services);
-
-            // use real database
-            ConfigureProductionServices(services);
-
-        }
-        public void ConfigureTestingServices(IServiceCollection services)
-        {
-            // use in-memory database
-            services.AddDbContext<CatalogContext>(c =>
-                c.UseInMemoryDatabase("Catalog"));
-
-            // Add Identity DbContext
-            services.AddDbContext<AppIdentityDbContext>(options =>
-                options.UseInMemoryDatabase("Identity"));
-
-            ConfigureServices(services);
-        }
-
-        public void ConfigureProductionServices(IServiceCollection services)
-        {
-            // use real database
-            services.AddDbContext<CatalogContext>((sp, c) =>
-                c.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
-
-            ConfigureServices(services);
-        }
-
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
-            })
-                .AddCookie()
-                .AddOpenIdConnect(options =>
-                {
-                    options.ResponseType = "code";
-                    options.RequireHttpsMetadata = false;
-                    options.Authority = "http://localhost:8000";
-                    options.ClientId = "12345678";
-                    options.ClientSecret = "12345678";
-                    options.GetClaimsFromUserInfoEndpoint = true;
-                    options.ClaimActions.Add(new JsonKeyClaimAction(ClaimTypes.Name, ClaimValueTypes.String, "name"));
-                });
-
-            services.AddScoped<ITenantScope, TenantScope>();
-            services.AddSingleton<TenantCache>();
-
-            services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-            services.AddScoped(typeof(IAsyncRepository<>), typeof(EfRepository<>));
-
-            //services.AddScoped<ICatalogService, CachedCatalogService>();
-            services.AddScoped<ICatalogService, CatalogService>();
-            services.AddScoped<IBasketService, BasketService>();
-            services.AddScoped<IBasketViewModelService, BasketViewModelService>();
-            services.AddScoped<IOrderService, OrderService>();
-            services.AddScoped<IOrderRepository, OrderRepository>();
-            services.AddScoped<CatalogService>();
-            services.Configure<CatalogSettings>(Configuration);
-            services.AddSingleton<IUriComposer>(new UriComposer(Configuration.Get<CatalogSettings>()));
-
-            services.AddScoped(typeof(IAppLogger<>), typeof(LoggerAdapter<>));
-            services.AddTransient<IEmailSender, EmailSender>();
-
-            // Add memory cache services
-            services.AddMemoryCache();
-
-            services.AddMvc();
-
-            _services = services;
-        }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app,
@@ -136,6 +59,91 @@ namespace Microsoft.eShopWeb
             app.UseAuthentication();
 
             app.UseMvc();
+        }
+
+        public void ConfigureDevelopmentServices(IServiceCollection services)
+        {
+            // use in-memory database
+            //ConfigureTestingServices(services);
+
+            // use real database
+            ConfigureProductionServices(services);
+        }
+
+        public void ConfigureProductionServices(IServiceCollection services)
+        {
+            // use real database
+            services.AddDbContext<CatalogContext>((sp, c) =>
+                c.UseSqlServer(sp.GetService<ITenantScope>().ConnectionString));
+
+            ConfigureServices(services);
+        }
+
+        public void ConfigureServices(IServiceCollection services)
+        {
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+            })
+                .AddCookie()
+                .AddOpenIdConnect(options =>
+                {
+                    options.Scope.Add("openid");
+                    options.Scope.Add("profile");
+                    options.Scope.Add("webapp");
+
+                    options.ResponseType = "code";
+                    options.RequireHttpsMetadata = false;
+                    options.Authority = "http://localhost:8000";
+                    options.ClientId = "12345678";
+                    options.ClientSecret = "12345678";
+                    options.GetClaimsFromUserInfoEndpoint = true;
+                    options.ClaimActions.Add(new JsonKeyClaimAction(ClaimTypes.Name, ClaimValueTypes.String, "name"));
+                    options.ClaimActions.Add(new JsonKeyClaimAction("connectionstring", ClaimValueTypes.String, "connection_string"));
+                    options.ClaimActions.Add(new JsonKeyClaimAction("tenantkey", ClaimValueTypes.String, "tenant_key"));
+                    options.ClaimActions.Add(new JsonKeyClaimAction("tenantid", ClaimValueTypes.String, "tenant_id"));
+                });
+
+            services.AddSingleton<TenantCache>();
+            services.AddScoped<ITenantScope, TenantScope>();
+
+            services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+            services.AddScoped(typeof(IAsyncRepository<>), typeof(EfRepository<>));
+
+            //services.AddScoped<ICatalogService, CachedCatalogService>();
+            services.AddScoped<ICatalogService, CatalogService>();
+            services.AddScoped<IBasketService, BasketService>();
+            services.AddScoped<IBasketViewModelService, BasketViewModelService>();
+            services.AddScoped<IOrderService, OrderService>();
+            services.AddScoped<IOrderRepository, OrderRepository>();
+            services.AddScoped<CatalogService>();
+            services.Configure<CatalogSettings>(Configuration);
+            services.AddSingleton<IUriComposer>(new UriComposer(Configuration.Get<CatalogSettings>()));
+
+            services.AddScoped(typeof(IAppLogger<>), typeof(LoggerAdapter<>));
+            services.AddTransient<IEmailSender, EmailSender>();
+
+            // Add memory cache services
+            services.AddMemoryCache();
+
+            services.AddMvc();
+
+            _services = services;
+        }
+
+        public void ConfigureTestingServices(IServiceCollection services)
+        {
+            // use in-memory database
+            services.AddDbContext<CatalogContext>(c =>
+                c.UseInMemoryDatabase("Catalog"));
+
+            // Add Identity DbContext
+            services.AddDbContext<AppIdentityDbContext>(options =>
+                options.UseInMemoryDatabase("Identity"));
+
+            ConfigureServices(services);
         }
 
         private void ListAllRegisteredServices(IApplicationBuilder app)

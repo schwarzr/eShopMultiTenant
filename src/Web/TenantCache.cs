@@ -21,55 +21,31 @@ namespace Microsoft.eShopWeb
             _cache = new MemoryCache(new MemoryCacheOptions());
         }
 
-        public async Task<ITenantScope> GetTenantScopeAsync(string key, IServiceProvider sp)
+        public async Task<bool?> GetTenantScopeAsync(string key, IServiceProvider sp)
         {
-            return await _cache.GetOrCreateAsync<ITenantScope>(key, p => CreateTenantScope(p, sp));
+            return await _cache.GetOrCreateAsync<bool?>(key, p => CreateTenantScope(p, sp));
         }
 
-        private async Task<ITenantScope> CreateTenantScope(ICacheEntry arg, IServiceProvider sp)
+        private async Task<bool?> CreateTenantScope(ICacheEntry arg, IServiceProvider sp)
         {
             var key = (string)arg.Key;
 
-            var ctx = sp.GetRequiredService<TenantContext>();
-            var data = await ctx.TenantSetup.SingleOrDefaultAsync(p => p.TenantKey == key);
+            var tenantScope = sp.GetRequiredService<ITenantScope>();
 
-            ITenantScope result = null;
-            if (data != null)
+            var catalogContext = sp.GetRequiredService<CatalogContext>();
+            var pending = await catalogContext.Database.GetPendingMigrationsAsync();
+
+            if (pending.Any())
             {
-                result = new TenantScope
+                await catalogContext.Database.MigrateAsync();
+
+                if (pending.Contains("20171018175735_Initial"))
                 {
-                    TenantKey = data.TenantKey,
-                    ConnectionString = data.ConnectionString
-                };
-
-                using (var scope = sp.CreateScope())
-                {
-                    var tenantScope = scope.ServiceProvider.GetRequiredService<ITenantScope>();
-                    tenantScope.TenantKey = result.TenantKey;
-                    tenantScope.ConnectionString = result.ConnectionString;
-
-                    var catalogContext = scope.ServiceProvider.GetRequiredService<CatalogContext>();
-                    var pending = await catalogContext.Database.GetPendingMigrationsAsync();
-
-                    if (pending.Any())
-                    {
-                        await catalogContext.Database.MigrateAsync();
-                        var identityContext = scope.ServiceProvider.GetRequiredService<AppIdentityDbContext>();
-                        await identityContext.Database.MigrateAsync();
-
-                        if (pending.Contains("20171018175735_Initial"))
-                        {
-                            await CatalogContextSeed.SeedAsync(catalogContext, scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
-                            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                            await AppIdentityDbContextSeed.SeedAsync(userManager);
-                        }
-                    }
+                    await CatalogContextSeed.SeedAsync(catalogContext, sp.GetRequiredService<ILoggerFactory>());
                 }
-
             }
-            arg.SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
 
-            return result;
+            return true;
         }
     }
 }
